@@ -1,0 +1,541 @@
+---
+title: "Durham County Property Tax Analysis"
+author: "Lane Childers"
+date: "2023-02-09"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(lmtest)
+library(car)
+library(MASS)
+library(sandwich)
+library(lmtest)
+library(tidyverse)
+```
+
+```{r}
+
+df <- read.csv(
+  "Your Directory")
+```
+
+```{r}
+df2 <- df[c(19,36,37,46,47,56,58,61,64)]
+df2$attached_garage<-ifelse(df2$attached_garage=="Y",1,0) ###binary 
+
+```
+
+```{r}
+df3 <- df[c(36,37,46,47,56,58,61,64)]
+df3$attached_garage<-ifelse(df3$attached_garage=="Y",1,0) ####fixed variable typing
+df3$of_bathrooms <- as.numeric(df3$of_bathrooms)
+df3$of_bedrooms <- as.numeric(df3$of_bedrooms)
+df3$tax_bill <- as.numeric(df3$tax_bill)
+```
+
+```{r}
+pairs(df3[,c(3,8)])
+
+```
+
+
+
+
+```{R}
+
+
+summary(df3)
+
+
+
+```
+
+
+```{r}
+
+z = cor(df3, use = 'complete.obs')
+corrplot(z, method = "color")
+
+
+```
+
+```{r, warning = F}
+
+ggplot(data=df3, mapping=aes(x=tax_bill)) +
+  geom_boxplot() +labs(title = "", x = "Tax Bill") 
+
+
+
+```
+
+```{r}
+
+summary(lm(tax_bill~ of_bathrooms + of_bedrooms + attached_garage, data = df3))
+
+
+```
+
+```{r}
+
+
+df4 <- filter(df3, tax_bill > 1000, actual_year_built < 2018, total_ass_value > 0) ### initial clean up
+
+```
+
+```{R}
+
+
+pairs(df4[,c(3,8)])
+
+```
+
+```{r}
+
+df5 <- filter(df3, tax_bill > 1000, actual_year_built < 2018 & actual_year_built > 1899,  total_ass_value > 0) #### maybe done cleanup?
+
+```
+
+```{r}
+plot(df5$actual_year_built, df5$tax_bill)
+
+pairs(df5)
+
+```
+
+```{r}
+
+plot(df5$total_ass_value, df5$tax_bill)
+
+cor(df5$total_ass_value, df5$tax_bill)
+
+```
+
+```{r}
+
+vector <- length(df5)
+tax_rate <- c()
+q <- c()
+
+for (i in 1:length(df5$tax_bill)) {
+  q <- df5$total_ass_value[i] / df5$tax_bill[i]
+  tax_rate[i] <- q
+}
+
+```
+
+```{r}
+
+true_tax_rate <- 1/ median(tax_rate)
+
+true_tax_rate
+
+
+
+```
+
+```{r}
+
+df5 <- df5 %>%
+  rename(Tax_Bill = TaxBill)
+
+lm1 <- lm(Tax_Bill ~ total_ass_value, data = df5)
+summary(lm1)
+
+
+```
+```{r}
+
+
+lm2 <- lm(tax_bill ~ of_bathrooms + of_bedrooms, data = df5)
+
+summary(lm2)
+
+
+```
+```{r}
+
+
+
+
+lm1.out <- lm(Tax_Bill~. , data=df5)
+summary(lm1.out)
+
+
+```
+```{r}
+
+
+
+
+plot(lm1.out, which = 1) # fairly homoskedastic
+plot(lm1.out, which = 2) # residuals look normally distributed
+
+
+```
+
+```{r}
+
+plot(lm1.out, which = 4)
+
+
+```
+```{r}
+
+dwtest(lm1.out)
+
+```
+```{r}
+
+### check for constant variance.
+
+plot(resid(lm1.out)^2~fitted(lm1.out), main="Squared Residuals vs. Fitted",
+     cex=1.25,cex.axis=1.25,cex.lab=1.25) 
+### probably not heteroskedastic, but most of the values are grouped together.
+```
+```{r}
+
+# consider also the slope in the following model:
+fitlm1.res <- lm(resid(lm1.out)^2~fitted(lm1.out))
+# is the slope significant?
+summary(fitlm1.res)
+
+### the slope is significant so there is evidence of heteroskedasticity in our data, which isn't good.
+
+
+```
+```{r}
+df6 <- df[c(6,19,36,37,46,47,56,58,61,64)]
+df6$attached_garage<-ifelse(df6$attached_garage=="Y",1,0) ###binary 
+df6$of_bathrooms <- as.numeric(df6$of_bathrooms)
+df6$of_bedrooms <- as.numeric(df6$of_bedrooms)
+df6$tax_bill <- as.numeric(df6$tax_bill)
+
+
+```
+
+```{r}
+
+df7 <- filter(df6, tax_bill > 1000, actual_year_built < 2018 & actual_year_built > 1899,  total_ass_value > 0, df6$desc_land_use =="RES/ 1-FAMILY")
+
+
+
+```
+
+
+```{r}
+
+test12 <- boxcox(lm(tax_bill ~ total_ass_value + map_acres + actual_year_built+heated_sqft+
+         of_bathrooms + of_bedrooms + attached_garage, data=df7), plotit=TRUE)
+
+test12$x[test12$y == max(test12$y)]
+
+
+
+
+```
+
+```{r}
+
+test13 <- boxCox(lm(tax_bill ~ actual_year_built, data=df7), plotit=TRUE,
+                 lambda = seq(-1, 1, 1/10))
+
+test13$x[test13$y == max(test13$y)]
+
+
+
+```
+
+```{R}
+model_poly = lm(tax_bill ~ total_ass_value+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+of_bathrooms+of_bedrooms+attached_garage, data = df7)
+
+plot(model_poly)
+```
+
+```{r}
+
+
+plot(model_poly, which = 4)
+
+
+```
+```{R}
+
+
+plot(resid(model_poly)^2~fitted(model_poly), main="Squared Residuals vs. Fitted",
+     cex=1.25,cex.axis=1.25,cex.lab=1.25) 
+
+
+```
+
+```{R}
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() 
+
+```
+
+
+```{r}
+
+df7 <- df7[-c(9711,45192,51279),]
+
+
+```
+
+```{r}
+
+model_poly2 = lm(tax_bill ~ total_ass_value+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+of_bathrooms+of_bedrooms+attached_garage, data = df7)
+
+ plot(model_poly2)
+
+plot(model_poly2, which = 4)
+
+
+```
+```{r}
+
+
+df7 <- df7[-c(4531,21856,48588),]
+
+
+```
+
+
+```{r}
+
+
+model_poly3 = lm(tax_bill ~ total_ass_value+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+of_bathrooms+of_bedrooms+attached_garage, data = df7)
+
+ plot(model_poly3)
+
+plot(model_poly3, which = 4)
+
+plot(resid(model_poly3)^2~fitted(model_poly3), main="Squared Residuals vs. Fitted",
+     cex=1.25,cex.axis=1.25,cex.lab=1.25) 
+
+
+
+
+```
+
+```{r}
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() 
+
+
+```
+
+
+```{r}
+
+
+df7 <- df7[-c(441),]
+
+
+```
+
+```{r}
+
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() 
+
+
+```
+```{r}
+
+model_poly3 = lm(tax_bill ~ total_ass_value+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+of_bathrooms+of_bedrooms+attached_garage, data = df7)
+
+ plot(model_poly3)
+
+plot(model_poly3, which = 4)
+
+
+
+```
+
+```{r}
+
+
+plot(resid(model_poly3)^2~fitted(model_poly3), main="Squared Residuals vs. Fitted",
+     cex=1.25,cex.axis=1.25,cex.lab=1.25) 
+
+
+
+
+
+```
+
+```{r}
+
+df7 <- filter(df7, tax_bill < 20000)
+
+
+```
+
+```{r}
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() 
+
+
+```
+```{r}
+
+###df7 <- filter(df7, tax_bill < 7500)
+
+```
+
+
+```{r}
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() +labs(title = "", x = "Tax Bill")
+
+```
+```{r}
+
+
+model_poly3 = lm(log(tax_bill) ~ total_ass_value+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+of_bathrooms+of_bedrooms+attached_garage, data = df7)
+
+plot(model_poly3)
+
+plot(model_poly3, which = 4)
+
+
+```
+
+```{r}
+
+plot(resid(model_poly3)^2~fitted(model_poly3), main="Squared Residuals vs. Fitted",
+     cex=1.25,cex.axis=1.25,cex.lab=1.25)
+
+
+```
+
+```{r}
+
+hist(df7$tax_bill)
+
+hist(log(df7$total_ass_value))
+
+
+
+```
+
+```{r}
+
+
+ggplot(data=df7, mapping=aes(x=log(tax_bill))) +
+  geom_boxplot() 
+
+
+```
+
+```{r}
+
+
+summary(model_poly3)
+coeftest(model_poly3, vcov. = vcovHC(model_poly3, type = "HC0"))
+
+
+
+```
+
+```{r}
+
+
+plot(df7$actual_year_built, log(df7$tax_bill))
+
+#maybe transform year into categorical into chunks
+
+
+
+```
+
+
+
+```{r}
+
+
+par(mfrow=c(2,4)) 
+hist(df7$tax_bill, main = "", xlab="Tax Bill")
+hist(df7$total_ass_value, main = "", xlab=" Total Assessed Value") ##should log
+hist(df7$map_acres, main = "", xlab="Map Acres")
+hist(df7$actual_year_built,main = "", xlab="Year Built") ##should log
+hist(df7$heated_sqft,main = "", xlab="Heated Sqft")
+hist(df7$of_bathrooms,main = "", xlab="Number of Bathrooms")
+hist(df7$of_bedrooms,main = "", xlab="Number of Bedrooms")
+hist(df7$attached_garage,main = "", xlab="Attached Garage")
+
+
+```
+
+```{r}
+
+ggplot(data=df7, mapping=aes(x=tax_bill)) +
+  geom_boxplot() +labs(x="Tax Bill")
+
+
+
+```
+
+
+```{r}
+
+z = cor(df7[3:10], use = 'complete.obs')
+corrplot(z, method = "color")
+
+
+```
+
+```{r}
+
+
+model_poly4 = lm(log(tax_bill) ~ log(total_ass_value)+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+ of_bathrooms + of_bedrooms, data = df7)
+
+summary(model_poly4)
+
+plot(model_poly4)
+
+plot(model_poly4, which = 4)
+
+
+```
+
+```{r}
+
+coeftest(model_poly4, vcov. = vcovHC(model_poly4, type = "HC0"))
+
+
+```
+```{r}
+
+
+summary(lm(log(total_ass_value)~log(tax_bill), data = df7))
+
+plot(lm(log(total_ass_value)~log(tax_bill), data = df7))
+
+
+
+```
+
+```{r}
+
+model_poly5 = lm(log(total_ass_value) ~ log(tax_bill)+map_acres+poly(actual_year_built,2)+
+                  poly(heated_sqft,2)+ of_bathrooms + of_bedrooms, data = df7)
+plot(model_poly5)
+
+```
